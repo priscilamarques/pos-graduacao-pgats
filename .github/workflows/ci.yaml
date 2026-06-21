@@ -1,0 +1,120 @@
+name: 'CI - Pipeline'
+ 
+# ---------------------------------------------------------------------------
+# GATILHOS / TRIGGERS
+# ---------------------------------------------------------------------------
+on:
+  # N1 - Execução manual (botão "Run workflow")
+  workflow_dispatch:
+ 
+  # N2 - Execução agendada
+  schedule:
+    # campos do cron: 1-minuto 2-hora 3-dia_do_mês 4-mês 5-dia_da_semana
+    - cron: '*/30 * * * *'   # a cada 30 minutos
+    - cron: '0 0 * * 5'      # toda sexta-feira à meia-noite (UTC)
+ 
+  # N4 - Execução integrada ao build (push na master)
+  push:
+    branches:
+      - master
+ 
+# Evita rodar pipelines duplicadas no mesmo ref simultaneamente
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+ 
+# ---------------------------------------------------------------------------
+# JOBS
+# ---------------------------------------------------------------------------
+jobs:
+  # N1 - Testes (núcleo reaproveitado por todos os gatilhos acima)
+  testes:
+    name: 'N1 - Testes (Mocha)'
+    runs-on: ubuntu-latest
+ 
+    defaults:
+      run:
+        working-directory: ./entrega
+ 
+    steps:
+      - name: Clonando o projeto
+        uses: actions/checkout@v4
+ 
+      - name: Configurando Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: entrega/package-lock.json
+ 
+      - name: Instalando dependências
+        run: npm ci
+ 
+      - name: Executando testes
+        run: npm test
+ 
+  # N4 - Inspeção/lint executada apenas em push (build do código).
+  #      O projeto não possui script "lint"; usamos a verificação de sintaxe
+  #      nativa do Node para não quebrar a pipeline.
+  inspecao:
+    name: 'N4 - Inspeção de Código'
+    if: ${{ github.event_name == 'push' }}
+    runs-on: ubuntu-latest
+ 
+    defaults:
+      run:
+        working-directory: ./entrega
+ 
+    steps:
+      - name: Clonando o projeto
+        uses: actions/checkout@v4
+ 
+      - name: Configurando Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+ 
+      - name: Inspeção de código (verificação de sintaxe)
+        run: |
+          find src test -name '*.js' -print0 \
+            | xargs -0 -I{} node --check "{}"
+ 
+  # N4 - Deploy simulado, depende dos testes e da inspeção (somente em push).
+  deploy:
+    name: 'N4 - Deploy'
+    if: ${{ github.event_name == 'push' }}
+    needs: [testes, inspecao]
+    runs-on: ubuntu-latest
+ 
+    steps:
+      - name: Simulação de Deploy
+        run: echo 'Deploy sendo realizado...'
+ 
+  # N3 - Job que roda após a conclusão bem-sucedida do deploy.
+  pos-deploy:
+    name: 'N3 - Execução por Deploy'
+    if: ${{ github.event_name == 'push' }}
+    needs: [deploy]
+    runs-on: ubuntu-latest
+ 
+    defaults:
+      run:
+        working-directory: ./entrega
+ 
+    steps:
+      - name: Clonando o projeto
+        uses: actions/checkout@v4
+ 
+      - name: Configurando Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: entrega/package-lock.json
+ 
+      - name: Instalando dependências
+        run: npm ci
+ 
+      - name: Executando testes pós-deploy
+        run: npm test
+ 
