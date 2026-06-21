@@ -1,6 +1,3 @@
-# CI - Pipeline consolidada (Níveis 01 a 04)
-# Projeto real: testes Mocha localizados em ./entrega
-# Script disponível no package.json: "test": "mocha test/**/*.test.js"
 
 name: 'CI - Pipeline'
 
@@ -31,9 +28,10 @@ concurrency:
 # JOBS
 # ---------------------------------------------------------------------------
 jobs:
-  # N1 - Testes (núcleo reaproveitado por todos os gatilhos acima)
+  # N1 - Testes manuais (botão Run workflow)
   testes:
     name: 'N1 - Testes (Mocha)'
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event_name == 'push' }}
     runs-on: ubuntu-latest
 
     defaults:
@@ -55,6 +53,34 @@ jobs:
         run: npm ci
 
       - name: Executando testes
+        run: npm test
+
+  # N2 - Testes agendados (gatilho schedule). Aparece como job próprio
+  #      somente nas execuções disparadas pelo cron.
+  agendado:
+    name: 'N2 - Execução Agendada'
+    if: ${{ github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: ./entrega
+
+    steps:
+      - name: Clonando o projeto
+        uses: actions/checkout@v4
+
+      - name: Configurando Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24.x
+          cache: npm
+          cache-dependency-path: entrega/package-lock.json
+
+      - name: Instalando dependências
+        run: npm ci
+
+      - name: Executando testes agendados
         run: npm test
 
   # N4 - Inspeção/lint executada apenas em push (build do código).
